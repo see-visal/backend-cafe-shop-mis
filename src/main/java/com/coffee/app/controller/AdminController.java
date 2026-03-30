@@ -49,6 +49,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import lombok.Generated;
 import org.springframework.data.domain.Page;
@@ -76,6 +77,7 @@ import org.springframework.web.multipart.MultipartFile;
 @RequestMapping({"/api/admin"})
 @PreAuthorize("hasRole('ADMIN')")
 public class AdminController {
+   private static final Set<String> ALLOWED_UPLOAD_DIRECTORIES = Set.of("products", "categories", "ingredients", "users", "users/profile", "users/cover", "users/customers");
    private final ProductService productService;
    private final OrderService orderService;
    private final InventoryService inventoryService;
@@ -145,6 +147,34 @@ public class AdminController {
       this.categoryService.delete(id);
       this.auditLogService.log(this.actorId(jwt), "DELETE_CATEGORY", "Category", String.valueOf(id), "Deleted category");
       return ResponseEntity.noContent().build();
+   }
+
+   @PostMapping(
+      value = {"/uploads/image"},
+      consumes = {"multipart/form-data"}
+   )
+   public ResponseEntity<Map<String, String>> uploadImage(@RequestParam("file") MultipartFile file, @RequestParam(defaultValue = "users") String directory, @AuthenticationPrincipal Jwt jwt) {
+      if (file.isEmpty()) {
+         return ResponseEntity.badRequest().body(Map.of("error", "File is empty"));
+      }
+
+      String normalizedDirectory = directory == null ? "users" : directory.trim().toLowerCase();
+      if (!ALLOWED_UPLOAD_DIRECTORIES.contains(normalizedDirectory)) {
+         return ResponseEntity.badRequest().body(Map.of("error", "Unsupported upload directory: " + directory));
+      }
+
+      String contentType = file.getContentType();
+      if (contentType == null || !contentType.startsWith("image/")) {
+         return ResponseEntity.badRequest().body(Map.of("error", "Only image files are allowed"));
+      }
+
+      try {
+         String imageUrl = this.fileStorageService.uploadFile(file, normalizedDirectory);
+         this.auditLogService.log(this.actorId(jwt), "UPLOAD_IMAGE", "Media", imageUrl, "Uploaded image to " + normalizedDirectory);
+         return ResponseEntity.ok(Map.of("imageUrl", imageUrl));
+      } catch (Exception e) {
+         return ResponseEntity.badRequest().body(Map.of("error", "Failed to upload image: " + e.getMessage()));
+      }
    }
 
    @GetMapping({"/products"})
