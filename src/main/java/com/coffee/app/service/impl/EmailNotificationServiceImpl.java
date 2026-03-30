@@ -6,6 +6,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
@@ -17,8 +18,10 @@ import jakarta.mail.internet.MimeMessage;
 @Slf4j
 public class EmailNotificationServiceImpl implements EmailNotificationService {
     private final JavaMailSender javaMailSender;
-    private static final String FROM_EMAIL = "noreply@salseecoffee.com";
     private static final String ADMIN_SUBJECT_PREFIX = "[SalSee Admin Alert]";
+
+    @Value("${notifications.from-email:noreply@salseecoffee.com}")
+    private String fromEmail;
 
     @Override
     public void sendOrderNotification(NotificationResponse notification, String adminEmail) {
@@ -96,8 +99,9 @@ public class EmailNotificationServiceImpl implements EmailNotificationService {
     private void sendHtmlEmail(String to, String subject, String htmlContent) throws MessagingException {
         MimeMessage message = javaMailSender.createMimeMessage();
         MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
-        
-        helper.setFrom(FROM_EMAIL);
+
+        String sender = fromEmail != null && !fromEmail.isBlank() ? fromEmail : "noreply@salseecoffee.com";
+        helper.setFrom(sender);
         helper.setTo(to);
         helper.setSubject(subject);
         helper.setText(htmlContent, true);

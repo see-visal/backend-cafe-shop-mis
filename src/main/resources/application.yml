@@ -101,6 +101,10 @@ stripe:
   api-key: ${STRIPE_API_KEY:}
   webhook-secret: ${STRIPE_WEBHOOK_SECRET:}
 
+notifications:
+  from-email: ${NOTIFICATIONS_FROM_EMAIL:${MAIL_USERNAME:noreply@salseecoffee.com}}
+  admin-email: ${ADMIN_NOTIFICATION_EMAIL:${MAIL_USERNAME:admin@salseecoffee.com}}
+
 # ── local profile: run from IDE / CLI; expects Postgres from this project on localhost:5433 ─
 #    Start it with: cd deployment/postgres && docker compose up -d postgres
 ---

@@ -11,6 +11,7 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -24,9 +25,9 @@ public class NotificationServiceImpl implements NotificationService {
     private final NotificationRepository notificationRepository;
     private final NotificationMapper notificationMapper;
     private final EmailNotificationService emailNotificationService;
-    
-    // Default admin email - should be configurable from environment
-    private static final String DEFAULT_ADMIN_EMAIL = "admin@salseecoffee.com";
+
+    @Value("${notifications.admin-email:}")
+    private String adminNotificationEmail;
 
     @Override
     public NotificationResponse createNotification(
@@ -57,22 +58,27 @@ public class NotificationServiceImpl implements NotificationService {
     }
     
     private void sendEmailNotificationAsync(NotificationResponse notification, String type) {
+        if (adminNotificationEmail == null || adminNotificationEmail.isBlank()) {
+            log.warn("Admin notification email is not configured - skipping {} email", type);
+            return;
+        }
+
         try {
             switch(type.toLowerCase()) {
                 case "order":
-                    emailNotificationService.sendOrderNotification(notification, DEFAULT_ADMIN_EMAIL);
+                    emailNotificationService.sendOrderNotification(notification, adminNotificationEmail);
                     break;
                 case "payment":
-                    emailNotificationService.sendPaymentNotification(notification, DEFAULT_ADMIN_EMAIL);
+                    emailNotificationService.sendPaymentNotification(notification, adminNotificationEmail);
                     break;
                 case "stock":
-                    emailNotificationService.sendStockAlertNotification(notification, DEFAULT_ADMIN_EMAIL);
+                    emailNotificationService.sendStockAlertNotification(notification, adminNotificationEmail);
                     break;
                 case "loyalty":
-                    emailNotificationService.sendLoyaltyNotification(notification, DEFAULT_ADMIN_EMAIL);
+                    emailNotificationService.sendLoyaltyNotification(notification, adminNotificationEmail);
                     break;
                 default:
-                    emailNotificationService.sendGenericNotification(notification, DEFAULT_ADMIN_EMAIL);
+                    emailNotificationService.sendGenericNotification(notification, adminNotificationEmail);
             }
         } catch (Exception e) {
             log.warn("Failed to send email notification: {}", e.getMessage());
