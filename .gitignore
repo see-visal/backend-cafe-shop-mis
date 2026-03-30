@@ -1,0 +1,8 @@
+build/
+target/
+*.jar
+*.war
+*.class
+*.log
+.env
+!gradle/wrapper/gradle-wrapper.jar
