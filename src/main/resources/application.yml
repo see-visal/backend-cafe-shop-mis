@@ -136,6 +136,12 @@ spring:
   config:
     activate:
       on-profile: docker
+  main:
+    lazy-initialization: true
+  data:
+    jpa:
+      repositories:
+        bootstrap-mode: deferred
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://postgres:5432/coffee_shop_db}
     username: ${SPRING_DATASOURCE_USERNAME:coffeeshop}
