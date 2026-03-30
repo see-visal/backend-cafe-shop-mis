@@ -8,6 +8,8 @@ import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.ApplicationArguments;
+import org.springframework.boot.ApplicationRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,11 +21,10 @@ import com.coffee.app.repository.PermissionRepository;
 import com.coffee.app.repository.RoleRepository;
 import com.coffee.app.repository.UserRepository;
 
-import jakarta.annotation.PostConstruct;
 import lombok.Generated;
 
 @Component
-public class SecurityInit {
+public class SecurityInit implements ApplicationRunner {
    @Generated
    private static final Logger log = LoggerFactory.getLogger(SecurityInit.class);
    private final UserRepository userRepository;
@@ -34,9 +35,9 @@ public class SecurityInit {
    private static final List<String> BARISTA_PERMISSIONS = List.of("READ_ORDER", "WRITE_ORDER", "READ_PRODUCT", "READ_INGREDIENT", "WRITE_INGREDIENT");
    private static final List<String> CUSTOMER_PERMISSIONS = List.of("READ_PRODUCT", "READ_ORDER", "WRITE_ORDER", "READ_PAYMENT", "WRITE_PAYMENT");
 
-   @PostConstruct
+   @Override
    @Transactional
-   public void init() {
+   public void run(ApplicationArguments args) {
       log.info("=== SecurityInit: seeding permissions, roles and default users ===");
       ALL_PERMISSIONS.forEach((name) -> {
          if (this.permissionRepository.findByName(name).isEmpty()) {

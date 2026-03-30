@@ -16,6 +16,7 @@ RUN --mount=type=cache,target=/root/.gradle \
 # ── Runner — JRE only, no compiler tools ───────────────────────────────────────
 FROM eclipse-temurin:21-jre-alpine AS runner
 WORKDIR /app
+ENV SPRING_PROFILES_ACTIVE=docker
 COPY --from=builder /app/build/libs/*.jar app.jar
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]

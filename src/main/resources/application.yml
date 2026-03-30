@@ -27,7 +27,7 @@ spring:
     hibernate:
       ddl-auto: update        # Auto-create/update tables from entities (no Flyway needed)
     open-in-view: false
-    show-sql: true
+    show-sql: false
     properties:
       hibernate:
         format_sql: true
@@ -64,6 +64,7 @@ minio:
 
 # ── Server ────────────────────────────────────────────────────────────────────
 server:
+  address: 0.0.0.0
   port: ${PORT:8080}
 
 # ── Swagger / SpringDoc OpenAPI ────────────────────────────────────────────────
@@ -90,10 +91,10 @@ app:
 # ── Logging ───────────────────────────────────────────────────────────────────
 logging:
   level:
-    com.coffee.app:               DEBUG
-    org.springframework.security: DEBUG
-    org.hibernate.SQL:            DEBUG
-    org.hibernate.orm.jdbc.bind:  TRACE
+    com.coffee.app:               INFO
+    org.springframework.security: INFO
+    org.hibernate.SQL:            WARN
+    org.hibernate.orm.jdbc.bind:  WARN
 
 # ── Stripe (optional; leave unset to disable card payment) ─────────────────────
 stripe:
@@ -120,6 +121,15 @@ spring:
   mail:
     username: ${MAIL_USERNAME:visalsoeurn9@gmail.com}
     password: ${MAIL_PASSWORD:}
+  jpa:
+    show-sql: true
+
+logging:
+  level:
+    com.coffee.app:               DEBUG
+    org.springframework.security: DEBUG
+    org.hibernate.SQL:            DEBUG
+    org.hibernate.orm.jdbc.bind:  TRACE
 
 ---
 spring:
@@ -133,6 +143,15 @@ spring:
   mail:
     username: ${MAIL_USERNAME:}
     password: ${MAIL_PASSWORD:}
+  jpa:
+    show-sql: false
+
+logging:
+  level:
+    com.coffee.app:               INFO
+    org.springframework.security: INFO
+    org.hibernate.SQL:            WARN
+    org.hibernate.orm.jdbc.bind:  WARN
 
 
 
