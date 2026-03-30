@@ -163,9 +163,7 @@ public class MinioFileStorageServiceImpl implements FileStorageService {
     }
 
     private String buildPublicFileUrl(String objectName) {
-        String base = publicEndpoint.endsWith("/")
-                ? publicEndpoint.substring(0, publicEndpoint.length() - 1)
-                : publicEndpoint;
+        String base = sanitizePublicEndpoint(publicEndpoint);
         return base + "/" + bucketName + "/" + objectName;
     }
 
@@ -193,10 +191,20 @@ public class MinioFileStorageServiceImpl implements FileStorageService {
 
     private String extractObjectName(String fileUrl) {
         String value = fileUrl == null ? "" : fileUrl.trim();
+        String browserPrefix = "/browser/" + bucketName + "/";
 
         String bucketPrefix = bucketName + "/";
         String pathBucketPrefix = "/" + bucketPrefix;
 
+        int browserBucketIndex = value.indexOf(browserPrefix);
+        if (browserBucketIndex >= 0) {
+            String encodedObjectName = value.substring(browserBucketIndex + browserPrefix.length());
+            String objectName = java.net.URLDecoder.decode(encodedObjectName, java.nio.charset.StandardCharsets.UTF_8)
+                    .replaceFirst("^/+", "");
+            if (!objectName.isBlank()) {
+                return objectName;
+            }
+        }
         int absoluteBucketIndex = value.indexOf(pathBucketPrefix);
         if (absoluteBucketIndex >= 0) {
             return value.substring(absoluteBucketIndex + pathBucketPrefix.length());
@@ -211,6 +219,16 @@ public class MinioFileStorageServiceImpl implements FileStorageService {
             return value.substring(1);
         }
         return value;
+    }
+
+    private String sanitizePublicEndpoint(String endpoint) {
+        String value = endpoint == null ? "" : endpoint.trim();
+        if (value.isEmpty()) {
+            return "http://localhost:9000";
+        }
+
+        value = value.replaceAll("/+$", "");
+        return value.replaceFirst("/browser/?$", "");
     }
 }
 

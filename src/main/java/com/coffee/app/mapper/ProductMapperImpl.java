@@ -69,13 +69,17 @@ public class ProductMapperImpl implements ProductMapper {
       }
 
       String value = imageUrl.trim();
+      String base = sanitizeMinioBase(this.minioPublicEndpoint);
+
+      String browserUrl = normalizeBrowserUrl(value, base);
+      if (browserUrl != null) {
+         return browserUrl;
+      }
+
       if (value.startsWith("http://") || value.startsWith("https://")) {
          return value;
       }
 
-      String base = this.minioPublicEndpoint.endsWith("/")
-         ? this.minioPublicEndpoint.substring(0, this.minioPublicEndpoint.length() - 1)
-         : this.minioPublicEndpoint;
       String normalized = value.startsWith("/") ? value.substring(1) : value;
 
       if (normalized.startsWith(this.bucketName + "/")) {
@@ -87,5 +91,35 @@ public class ProductMapperImpl implements ProductMapper {
       }
 
       return value;
+   }
+
+   private String sanitizeMinioBase(String endpoint) {
+      if (endpoint == null || endpoint.isBlank()) {
+         return "http://localhost:9000";
+      }
+
+      String trimmed = endpoint.trim().replaceAll("/+$", "");
+      return trimmed.replaceFirst("/browser/?$", "");
+   }
+
+   private String normalizeBrowserUrl(String value, String base) {
+      String browserPrefix = "/browser/" + this.bucketName + "/";
+      int browserIndex = value.indexOf(browserPrefix);
+      if (browserIndex < 0) {
+         return null;
+      }
+
+      String encodedObjectPath = value.substring(browserIndex + browserPrefix.length());
+      if (encodedObjectPath.isBlank()) {
+         return null;
+      }
+
+      String objectPath = java.net.URLDecoder.decode(encodedObjectPath, java.nio.charset.StandardCharsets.UTF_8)
+         .replaceFirst("^/+", "");
+      if (objectPath.isBlank() || objectPath.endsWith("/")) {
+         return null;
+      }
+
+      return base + "/" + this.bucketName + "/" + objectPath;
    }
 }
