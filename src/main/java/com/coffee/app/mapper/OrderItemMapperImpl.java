@@ -4,11 +4,27 @@ import com.coffee.app.domain.OrderItem;
 import com.coffee.app.domain.Product;
 import com.coffee.app.dto.response.OrderItemResponse;
 import java.math.BigDecimal;
+import java.util.Set;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 @Component
 public class OrderItemMapperImpl implements OrderItemMapper {
+   private static final Set<String> LOCAL_PRODUCT_ASSETS = Set.of(
+      "products/espresso.jpg",
+      "products/cappuccino.jpg",
+      "products/iced_latte.jpg",
+      "products/matcha_green_tea.jpg",
+      "products/croissant.jpg"
+   );
+
+   @Value("${minio.bucket-name:coffeeshop-files}")
+   private String bucketName;
+
+   @Value("${minio.public-endpoint:http://localhost:9000}")
+   private String minioPublicEndpoint;
+
    public OrderItemResponse toResponse(OrderItem item) {
       if (item == null) {
          return null;
@@ -50,9 +66,22 @@ public class OrderItemMapperImpl implements OrderItemMapper {
 
       String value = product.getImageUrl().trim();
       if (value.startsWith("products/")) {
-         return "/" + value;
+         if (LOCAL_PRODUCT_ASSETS.contains(value)) {
+            return "/" + value;
+         }
+
+         return sanitizeMinioBase(this.minioPublicEndpoint) + "/" + this.bucketName + "/" + value;
       }
 
       return value;
+   }
+
+   private String sanitizeMinioBase(String endpoint) {
+      if (endpoint == null || endpoint.isBlank()) {
+         return "http://localhost:9000";
+      }
+
+      String trimmed = endpoint.trim().replaceAll("/+$", "");
+      return trimmed.replaceFirst("/browser/?$", "");
    }
 }

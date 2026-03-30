@@ -4,12 +4,21 @@ import com.coffee.app.domain.Product;
 import com.coffee.app.dto.request.ProductRequest;
 import com.coffee.app.dto.response.ProductResponse;
 import java.math.BigDecimal;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 @Component
 public class ProductMapperImpl implements ProductMapper {
+   private static final Set<String> LOCAL_PRODUCT_ASSETS = Set.of(
+      "products/espresso.jpg",
+      "products/cappuccino.jpg",
+      "products/iced_latte.jpg",
+      "products/matcha_green_tea.jpg",
+      "products/croissant.jpg"
+   );
+
    @Value("${minio.bucket-name:coffeeshop-files}")
    private String bucketName;
 
@@ -87,7 +96,11 @@ public class ProductMapperImpl implements ProductMapper {
       }
 
       if (normalized.startsWith("products/") || value.startsWith("/products/")) {
-         return "/" + normalized;
+         if (LOCAL_PRODUCT_ASSETS.contains(normalized)) {
+            return "/" + normalized;
+         }
+
+         return base + "/" + this.bucketName + "/" + normalized;
       }
 
       return value;
