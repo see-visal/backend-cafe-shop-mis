@@ -55,6 +55,7 @@ public class SecurityConfig {
               .authorizeHttpRequests(auth -> auth
                       .requestMatchers(HttpMethod.POST, "/api/public/auth/**").permitAll()
                       .requestMatchers("/api/public/**").permitAll()
+                      .requestMatchers("/media/**").permitAll()
                       .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**", "/v3/api-docs.yaml").permitAll()
                       .requestMatchers("/uploads/**").permitAll()
                       .requestMatchers("/api/customer/**", "/payment/**").hasAnyRole("CUSTOMER", "ADMIN", "BARISTA")
@@ -80,7 +81,7 @@ public class SecurityConfig {
       DefaultBearerTokenResolver delegate = new DefaultBearerTokenResolver();
       return (request) -> {
          String path = request.getRequestURI();
-         if (path.startsWith("/api/public/") || path.startsWith("/uploads/") || 
+         if (path.startsWith("/api/public/") || path.startsWith("/media/") || path.startsWith("/uploads/") || 
              path.startsWith("/swagger-ui/") || path.equals("/swagger-ui.html") || 
              path.startsWith("/v3/api-docs")) {
             return null;

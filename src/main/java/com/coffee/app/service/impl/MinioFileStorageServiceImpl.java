@@ -1,6 +1,8 @@
 package com.coffee.app.service.impl;
 
 import com.coffee.app.service.FileStorageService;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.minio.BucketExistsArgs;
 import io.minio.GetPresignedObjectUrlArgs;
 import io.minio.MakeBucketArgs;
@@ -15,6 +17,18 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.net.CookieManager;
+import java.net.CookiePolicy;
+import java.net.URI;
+import java.net.URLEncoder;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -25,9 +39,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @Service
 @RequiredArgsConstructor
 public class MinioFileStorageServiceImpl implements FileStorageService {
+    private static final Duration CONSOLE_TIMEOUT = Duration.ofSeconds(30);
+    private static final List<String> IMAGE_EXTENSIONS = List.of(".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif", ".svg");
 
     private final MinioClient minioClient;
     private final AtomicBoolean bucketReady = new AtomicBoolean(false);
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Value("${minio.bucket-name}")
     private String bucketName;
@@ -35,6 +52,12 @@ public class MinioFileStorageServiceImpl implements FileStorageService {
 
     @Value("${minio.public-endpoint:${minio.endpoint}}")
     private String publicEndpoint;
+
+    @Value("${minio.access-key}")
+    private String accessKey;
+
+    @Value("${minio.secret-key}")
+    private String secretKey;
 
     @PostConstruct
     void ensureBucketReady() {
@@ -162,6 +185,76 @@ public class MinioFileStorageServiceImpl implements FileStorageService {
         }
     }
 
+    @Override
+    public List<String> listFiles(String directory) {
+        String normalizedDirectory = normalizeDirectory(directory);
+
+        try {
+            String consoleBase = sanitizePublicEndpoint(publicEndpoint);
+            HttpClient client = createAuthenticatedConsoleClient(consoleBase);
+            String url = consoleBase
+                    + "/api/v1/buckets/"
+                    + encodePathSegment(bucketName)
+                    + "/objects?prefix="
+                    + encodeQueryValue(normalizedDirectory)
+                    + "&recursive=true";
+
+            HttpRequest request = HttpRequest.newBuilder(URI.create(url))
+                    .timeout(CONSOLE_TIMEOUT)
+                    .GET()
+                    .build();
+
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() != 200) {
+                throw new IllegalStateException("MinIO object list failed with status " + response.statusCode());
+            }
+
+            JsonNode root = objectMapper.readTree(response.body());
+            List<String> files = new ArrayList<>();
+            for (JsonNode objectNode : root.path("objects")) {
+                String objectName = objectNode.path("name").asText("");
+                if (!objectName.isBlank() && isImageFile(objectName)) {
+                    files.add(objectName);
+                }
+            }
+            return files;
+        } catch (Exception e) {
+            log.warn("Failed to list MinIO files for '{}': {}", normalizedDirectory, e.getMessage());
+            return List.of();
+        }
+    }
+
+    @Override
+    public StoredFile downloadFile(String fileUrl) {
+        String objectName = extractObjectName(fileUrl);
+
+        try {
+            String consoleBase = resolveConsoleBase(fileUrl);
+            HttpClient client = createAuthenticatedConsoleClient(consoleBase);
+            String url = consoleBase
+                    + "/api/v1/buckets/"
+                    + encodePathSegment(bucketName)
+                    + "/objects/download?prefix="
+                    + encodeQueryValue(objectName);
+
+            HttpRequest request = HttpRequest.newBuilder(URI.create(url))
+                    .timeout(CONSOLE_TIMEOUT)
+                    .GET()
+                    .build();
+
+            HttpResponse<byte[]> response = client.send(request, HttpResponse.BodyHandlers.ofByteArray());
+            String contentType = response.headers().firstValue("Content-Type").orElse("application/octet-stream");
+            if (response.statusCode() != 200 || !isRenderableContentType(contentType)) {
+                throw new IllegalStateException("MinIO download failed with status " + response.statusCode() + " and content type " + contentType);
+            }
+
+            return new StoredFile(response.body(), contentType);
+        } catch (Exception consoleException) {
+            log.warn("Falling back to direct MinIO file URL for '{}': {}", objectName, consoleException.getMessage());
+            return downloadDirectFile(fileUrl, objectName);
+        }
+    }
+
     private String buildPublicFileUrl(String objectName) {
         String base = sanitizePublicEndpoint(publicEndpoint);
         return base + "/" + bucketName + "/" + objectName;
@@ -219,6 +312,111 @@ public class MinioFileStorageServiceImpl implements FileStorageService {
             return value.substring(1);
         }
         return value;
+    }
+
+    private String resolveConsoleBase(String fileUrl) {
+        if (fileUrl != null && (fileUrl.startsWith("http://") || fileUrl.startsWith("https://"))) {
+            try {
+                URI uri = URI.create(fileUrl.trim());
+                StringBuilder base = new StringBuilder()
+                        .append(uri.getScheme())
+                        .append("://")
+                        .append(uri.getHost());
+                if (uri.getPort() > 0) {
+                    base.append(":").append(uri.getPort());
+                }
+                return sanitizePublicEndpoint(base.toString());
+            } catch (Exception ignored) {
+                // Fall back to configured public endpoint below.
+            }
+        }
+
+        return sanitizePublicEndpoint(publicEndpoint);
+    }
+
+    private HttpClient createAuthenticatedConsoleClient(String consoleBase) throws Exception {
+        CookieManager cookieManager = new CookieManager();
+        cookieManager.setCookiePolicy(CookiePolicy.ACCEPT_ALL);
+
+        HttpClient client = HttpClient.newBuilder()
+                .cookieHandler(cookieManager)
+                .followRedirects(HttpClient.Redirect.NORMAL)
+                .connectTimeout(CONSOLE_TIMEOUT)
+                .build();
+
+        String loginPayload = objectMapper.writeValueAsString(Map.of(
+                "accessKey", accessKey,
+                "secretKey", secretKey
+        ));
+
+        HttpRequest loginRequest = HttpRequest.newBuilder(URI.create(consoleBase + "/api/v1/login"))
+                .timeout(CONSOLE_TIMEOUT)
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(loginPayload))
+                .build();
+
+        HttpResponse<String> loginResponse = client.send(loginRequest, HttpResponse.BodyHandlers.ofString());
+        if (loginResponse.statusCode() != 204) {
+            throw new IllegalStateException("MinIO console login failed with status " + loginResponse.statusCode());
+        }
+
+        return client;
+    }
+
+    private StoredFile downloadDirectFile(String fileUrl, String objectName) {
+        try {
+            String directUrl;
+            if (fileUrl != null && (fileUrl.startsWith("http://") || fileUrl.startsWith("https://")) && !fileUrl.contains("/browser/")) {
+                directUrl = fileUrl.trim();
+            } else {
+                directUrl = buildPublicFileUrl(objectName);
+            }
+
+            HttpClient client = HttpClient.newBuilder()
+                    .connectTimeout(CONSOLE_TIMEOUT)
+                    .followRedirects(HttpClient.Redirect.NORMAL)
+                    .build();
+
+            HttpRequest request = HttpRequest.newBuilder(URI.create(directUrl))
+                    .timeout(CONSOLE_TIMEOUT)
+                    .GET()
+                    .build();
+
+            HttpResponse<byte[]> response = client.send(request, HttpResponse.BodyHandlers.ofByteArray());
+            String contentType = response.headers().firstValue("Content-Type").orElse("application/octet-stream");
+            if (response.statusCode() != 200 || !isRenderableContentType(contentType)) {
+                throw new IllegalStateException("Direct image fetch failed with status " + response.statusCode() + " and content type " + contentType);
+            }
+
+            return new StoredFile(response.body(), contentType);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to download file: " + e.getMessage(), e);
+        }
+    }
+
+    private boolean isRenderableContentType(String contentType) {
+        return contentType != null && contentType.toLowerCase().startsWith("image/");
+    }
+
+    private boolean isImageFile(String objectName) {
+        String lower = objectName.toLowerCase();
+        return IMAGE_EXTENSIONS.stream().anyMatch(lower::endsWith);
+    }
+
+    private String normalizeDirectory(String directory) {
+        String value = directory == null ? "" : directory.trim().replace('\\', '/').replaceAll("^/+", "");
+        if (value.isEmpty()) {
+            return "";
+        }
+        return value.endsWith("/") ? value : value + "/";
+    }
+
+    private String encodeQueryValue(String value) {
+        return URLEncoder.encode(value, StandardCharsets.UTF_8);
+    }
+
+    private String encodePathSegment(String value) {
+        return URLEncoder.encode(value, StandardCharsets.UTF_8).replace("+", "%20");
     }
 
     private String sanitizePublicEndpoint(String endpoint) {

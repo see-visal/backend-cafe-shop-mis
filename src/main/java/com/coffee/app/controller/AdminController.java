@@ -177,6 +177,23 @@ public class AdminController {
       }
    }
 
+   @GetMapping({"/storage/images"})
+   public ResponseEntity<List<Map<String, String>>> listStorageImages(@RequestParam(defaultValue = "products") String directory) {
+      String normalizedDirectory = directory == null ? "products" : directory.trim().toLowerCase();
+      if (!ALLOWED_UPLOAD_DIRECTORIES.contains(normalizedDirectory)) {
+         return ResponseEntity.badRequest().body(List.of(Map.of("error", "Unsupported upload directory: " + directory)));
+      }
+
+      List<Map<String, String>> images = this.fileStorageService.listFiles(normalizedDirectory).stream()
+         .map((path) -> Map.of(
+            "path", path,
+            "name", path.contains("/") ? path.substring(path.lastIndexOf('/') + 1) : path
+         ))
+         .toList();
+
+      return ResponseEntity.ok(images);
+   }
+
    @GetMapping({"/products"})
    public ResponseEntity<Page<ProductResponse>> getAllProducts(@RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
       PageRequest pageable = PageRequest.of(page, size, Sort.by(new String[]{"createdAt"}).descending());

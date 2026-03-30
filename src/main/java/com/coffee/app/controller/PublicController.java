@@ -7,6 +7,7 @@ import com.coffee.app.dto.request.PromoValidateRequest;
 import com.coffee.app.dto.response.PromoValidateResponse;
 import com.coffee.app.dto.response.ShopTableResponse;
 import com.coffee.app.service.CategoryService;
+import com.coffee.app.service.FileStorageService;
 import com.coffee.app.service.PasswordResetService;
 import com.coffee.app.service.ProductService;
 import com.coffee.app.service.PromoCodeService;
@@ -23,6 +24,8 @@ import lombok.Generated;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.springframework.http.CacheControl;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -31,6 +34,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import java.time.Duration;
 
 @RestController
 @RequestMapping({"/api/public"})
@@ -40,6 +44,7 @@ public class PublicController {
    private final TableService tableService;
    private final PromoCodeService promoCodeService;
    private final PasswordResetService passwordResetService;
+   private final FileStorageService fileStorageService;
 
    @Operation(
       summary = "Get product categories"
@@ -75,6 +80,20 @@ public class PublicController {
    @GetMapping({"/products/{id}"})
    public ResponseEntity<ProductResponse> getProduct(@PathVariable UUID id) {
       return ResponseEntity.ok(this.productService.getProductById(id));
+   }
+
+   @Operation(
+      summary = "Get a storage-backed image",
+      description = "Streams a MinIO-backed image through the backend so clients can render files even when MinIO is exposed through the console UI."
+   )
+   @GetMapping({"/storage/image"})
+   public ResponseEntity<byte[]> getStorageImage(@RequestParam String path) {
+      FileStorageService.StoredFile storedFile = this.fileStorageService.downloadFile(path);
+      MediaType mediaType = MediaType.parseMediaType(storedFile.contentType() != null ? storedFile.contentType() : MediaType.APPLICATION_OCTET_STREAM_VALUE);
+      return ResponseEntity.ok()
+         .cacheControl(CacheControl.maxAge(Duration.ofHours(1)).cachePublic())
+         .contentType(mediaType)
+         .body(storedFile.content());
    }
 
    @Operation(
@@ -121,11 +140,12 @@ public class PublicController {
    }
 
    @Generated
-   public PublicController(final ProductService productService, final CategoryService categoryService, final TableService tableService, final PromoCodeService promoCodeService, final PasswordResetService passwordResetService) {
+   public PublicController(final ProductService productService, final CategoryService categoryService, final TableService tableService, final PromoCodeService promoCodeService, final PasswordResetService passwordResetService, final FileStorageService fileStorageService) {
       this.productService = productService;
       this.categoryService = categoryService;
       this.tableService = tableService;
       this.promoCodeService = promoCodeService;
       this.passwordResetService = passwordResetService;
+      this.fileStorageService = fileStorageService;
    }
 }

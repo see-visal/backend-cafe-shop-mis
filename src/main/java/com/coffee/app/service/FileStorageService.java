@@ -1,11 +1,14 @@
 package com.coffee.app.service;
 
+import java.util.List;
 import org.springframework.web.multipart.MultipartFile;
 
 /**
  * File storage service interface for handling file uploads
  */
 public interface FileStorageService {
+    record StoredFile(byte[] content, String contentType) {}
+
     /**
      * Upload a file to storage
      * 
@@ -29,5 +32,21 @@ public interface FileStorageService {
      * @return the presigned URL
      */
     String getPresignedUrl(String fileUrl);
+
+    /**
+     * List files in a storage directory.
+     *
+     * @param directory directory/path prefix
+     * @return object paths inside the bucket
+     */
+    List<String> listFiles(String directory);
+
+    /**
+     * Download file bytes and metadata from storage.
+     *
+     * @param fileUrl file URL/path/object name
+     * @return stored file payload
+     */
+    StoredFile downloadFile(String fileUrl);
 }
 
