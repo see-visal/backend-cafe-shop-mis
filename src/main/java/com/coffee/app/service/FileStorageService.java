@@ -42,6 +42,13 @@ public interface FileStorageService {
     List<String> listFiles(String directory);
 
     /**
+     * Check whether the configured bucket currently exists.
+     *
+     * @return true when the bucket is reachable
+     */
+    boolean bucketExists();
+
+    /**
      * Download file bytes and metadata from storage.
      *
      * @param fileUrl file URL/path/object name

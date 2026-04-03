@@ -194,6 +194,25 @@ public class AdminController {
       return ResponseEntity.ok(images);
    }
 
+   @GetMapping({"/storage/status"})
+   public ResponseEntity<Map<String, Object>> getStorageStatus() {
+      return ResponseEntity.ok(Map.of(
+         "bucketReady", this.fileStorageService.bucketExists()
+      ));
+   }
+
+   @GetMapping({"/storage/presigned-url"})
+   public ResponseEntity<Map<String, String>> getStoragePresignedUrl(@RequestParam String path) {
+      return ResponseEntity.ok(Map.of("url", this.fileStorageService.getPresignedUrl(path)));
+   }
+
+   @DeleteMapping({"/storage/file"})
+   public ResponseEntity<Void> deleteStorageFile(@RequestParam String path, @AuthenticationPrincipal Jwt jwt) {
+      this.fileStorageService.deleteFile(path);
+      this.auditLogService.log(this.actorId(jwt), "DELETE_STORAGE_FILE", "Media", path, "Deleted file from MinIO");
+      return ResponseEntity.noContent().build();
+   }
+
    @GetMapping({"/products"})
    public ResponseEntity<Page<ProductResponse>> getAllProducts(@RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
       PageRequest pageable = PageRequest.of(page, size, Sort.by(new String[]{"createdAt"}).descending());
